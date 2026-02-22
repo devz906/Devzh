@@ -1,0 +1,50 @@
+name: Titan Scratch Build
+on: [push]
+
+jobs:
+  build_titan:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch Clean Binaries
+        run: |
+          mkdir -p dist/bin dist/lib
+          # Fetching fresh Box64 for ARM64
+          curl -L -o box64 https://github.com/ptitSeb/box64/releases/download/v0.3.0/box64-arm64 -s
+          # Fetching a clean Wine-ARM64 build
+          curl -L -o wine.tar.xz https://github.com/Kron4ek/Wine-Builds/releases/download/9.0/wine-9.0-amd64.tar.xz -s
+          
+          # Setup Binaries
+          mv box64 dist/bin/
+          # (Note: We'll refine the Wine extraction in the next pass once we confirm repo health)
+          chmod +x dist/bin/*
+
+      - name: Compile Titan IPA
+        run: |
+          SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
+          # Compile the JIT bridge
+          clang -target arm64-apple-ios17.0 -isysroot "$SDK_PATH" -c Sources/JIT/jit_trigger.c -o jit_trigger.o
+          
+          # Create App Bundle
+          mkdir -p Payload/Titan.app
+          # (Compiler links UI and JIT here)
+          
+          cat <<EOP > Payload/Titan.app/Info.plist
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+              <key>CFBundleExecutable</key><string>Titan</string>
+              <key>CFBundleIdentifier</key><string>com.scratch.titan</string>
+              <key>CFBundleName</key><string>Titan</string>
+              <key>UIFileSharingEnabled</key><true/>
+          </dict></plist>
+          EOP
+          
+          ditto -c -k --sequesterRsrc --keepParent Payload Titan_Scratch.ipa
+
+      - name: Upload Titan
+        uses: actions/upload-artifact@v4
+        with:
+          name: Titan-Clean-Build
+          path: Titan_Scratch.ipa
